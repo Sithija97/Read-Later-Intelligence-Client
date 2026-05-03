@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ReadingViewContent from "@/components/reading-view/ReadingViewContent";
 import ReadingViewFooter from "@/components/reading-view/ReadingViewFooter";
 import ReadingViewHeader from "@/components/reading-view/ReadingViewHeader";
@@ -9,7 +9,10 @@ import { useGetItem } from "@/services/queries";
 const ReadingView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const itemId = id ?? "";
+  const mode = (location.state as { mode?: "skim" | "read" } | null)?.mode;
+  const isSkimMode = mode === "skim";
 
   useEffect(() => {
     if (!itemId) {
@@ -53,7 +56,7 @@ const ReadingView = () => {
   const renderCenteredState = (
     title: string,
     description: string,
-    action?: { label: string; handler: () => void }
+    action?: { label: string; handler: () => void },
   ) => (
     <main className="flex flex-col min-h-[calc(100vh-64px)] bg-background items-center justify-center">
       <div className="text-center max-w-md px-6">
@@ -86,14 +89,14 @@ const ReadingView = () => {
       return renderCenteredState(
         "Article not found",
         "The article you're looking for doesn't exist.",
-        { label: "Go back home", handler: () => navigate("/") }
+        { label: "Go back home", handler: () => navigate("/") },
       );
     }
 
     return renderCenteredState(
       "Something went wrong",
       "We couldn't load this article. Please try again.",
-      { label: "Go back home", handler: () => navigate("/") }
+      { label: "Go back home", handler: () => navigate("/") },
     );
   }
 
@@ -101,7 +104,7 @@ const ReadingView = () => {
     return renderCenteredState(
       "Article unavailable",
       "We couldn't find details for this article yet.",
-      { label: "Go back home", handler: () => navigate("/") }
+      { label: "Go back home", handler: () => navigate("/") },
     );
   }
 
@@ -114,7 +117,7 @@ const ReadingView = () => {
         handler: () => {
           void refetch();
         },
-      }
+      },
     );
   }
 
@@ -129,11 +132,18 @@ const ReadingView = () => {
 
       {/* Reading Content - Scrollable */}
       <div className="flex-1 overflow-y-auto">
-        <ReadingViewContent content={article.content ?? ""} />
+        <ReadingViewContent
+          content={article.content ?? ""}
+          summary={article.summary ?? []}
+          mode={isSkimMode ? "skim" : "read"}
+        />
       </div>
 
       {/* Reading View Footer - Sticky */}
-      <ReadingViewFooter articleId={article.id} />
+      <ReadingViewFooter
+        articleId={article.id}
+        articleTitle={article.title ?? "Untitled article"}
+      />
     </main>
   );
 };

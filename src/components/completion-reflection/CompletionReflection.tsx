@@ -4,13 +4,16 @@ import { Textarea } from "@/components/ui/textarea";
 import SafeIcon from "@/components/common/SafeIcon";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useSubmitFeedback } from "@/services/queries";
 
 interface CompletionReflectionProps {
+  articleId?: string;
   articleTitle?: string;
   onComplete?: (rating: "yes" | "no", note?: string) => void;
 }
 
 const CompletionReflection = ({
+  articleId,
   articleTitle = "How We Read on the Internet",
   onComplete,
 }: CompletionReflectionProps) => {
@@ -18,7 +21,8 @@ const CompletionReflection = ({
   const [isClient, setIsClient] = useState(true);
   const [rating, setRating] = useState<"yes" | "no" | null>(null);
   const [note, setNote] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitFeedback = useSubmitFeedback();
+  const isSubmitting = submitFeedback.isPending;
 
   useEffect(() => {
     // Hydration: switch to pre-client state
@@ -35,10 +39,17 @@ const CompletionReflection = ({
   const handleSubmit = async () => {
     if (!rating) return;
 
-    setIsSubmitting(true);
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (articleId) {
+      try {
+        await submitFeedback.mutateAsync({
+          id: articleId,
+          worthReadingFeedback: rating,
+          note: note.trim() || undefined,
+        });
+      } catch {
+        return;
+      }
+    }
 
     if (onComplete) {
       onComplete(rating, note || undefined);
@@ -58,7 +69,7 @@ const CompletionReflection = ({
       <div
         className={cn(
           "max-w-md mx-auto transition-opacity duration-300",
-          isClient || true ? "opacity-100" : "opacity-50"
+          isClient || true ? "opacity-100" : "opacity-50",
         )}
       >
         {/* Header */}
@@ -69,6 +80,7 @@ const CompletionReflection = ({
           <p className="text-sm text-muted-foreground">
             Help us understand what you found valuable
           </p>
+          <p className="text-sm mt-2 text-foreground/80">{articleTitle}</p>
         </div>
 
         {/* Rating Buttons */}
@@ -79,7 +91,7 @@ const CompletionReflection = ({
             size="lg"
             className={cn(
               "transition-all",
-              rating === "yes" && "ring-2 ring-primary ring-offset-2"
+              rating === "yes" && "ring-2 ring-primary ring-offset-2",
             )}
           >
             <SafeIcon name="ThumbsUp" size={18} className="mr-2" />
@@ -91,7 +103,7 @@ const CompletionReflection = ({
             size="lg"
             className={cn(
               "transition-all",
-              rating === "no" && "ring-2 ring-primary ring-offset-2"
+              rating === "no" && "ring-2 ring-primary ring-offset-2",
             )}
           >
             <SafeIcon name="ThumbsDown" size={18} className="mr-2" />

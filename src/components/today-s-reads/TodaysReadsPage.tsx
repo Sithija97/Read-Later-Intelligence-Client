@@ -1,39 +1,38 @@
-import { useState, useEffect } from "react";
-import {
-  getDailyReads,
-  MOCK_ARTICLES,
-  ArticleStatus,
-  type ArticleModel,
-} from "@/data/Article";
+import { useState, useEffect, useMemo } from "react";
+import type { ArticleModel } from "@/data/Article";
 import ArticleCardItem from "./ArticleCardItem";
 import TodaysReadsEmpty from "./TodaysReadsEmpty";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useGetTodaysItems, useSnoozeItem } from "@/services/queries";
+import { mapItemToArticle } from "@/services/itemAdapters";
 
 export default function TodaysReadsPage() {
   const navigate = useNavigate();
-  const [isClient, setIsClient] = useState(true);
-  const [articles, setArticles] = useState<ArticleModel[]>([]);
+  const [isClient, setIsClient] = useState(false);
   const [snoozedIds, setSnoozedIds] = useState<Set<string>>(new Set());
+  const { data, isLoading, isError } = useGetTodaysItems();
+  const snoozeMutation = useSnoozeItem();
 
-  // SSG: Initialize with mock data
   useEffect(() => {
-    // State 0: Hydration start
-    setIsClient(false);
-
-    // Simulate loading and prepare data
-    const dailyArticles = MOCK_ARTICLES.filter(
-      (a) => a.isDailyRead && a.status !== ArticleStatus.Archived
-    );
-    setArticles(dailyArticles);
-
-    // State 1: Client ready
     const timer = requestAnimationFrame(() => {
       setIsClient(true);
     });
 
     return () => cancelAnimationFrame(timer);
   }, []);
+
+  const apiItems = data?.data?.status === "success" ? data.data.data : [];
+
+  const articles = useMemo<ArticleModel[]>(
+    () => apiItems.map(mapItemToArticle),
+    [apiItems],
+  );
+
+  const visibleArticles = useMemo(
+    () => articles.filter((article) => !snoozedIds.has(article.id)),
+    [articles, snoozedIds],
+  );
 
   const handleRead = (articleId: string) => {
     // Navigate to reading view with article ID
@@ -42,35 +41,42 @@ export default function TodaysReadsPage() {
 
   const handleSkim = (articleId: string) => {
     // Navigate to reading view in skim mode (using state for mode)
-    navigate(`/reading-view/${articleId}`, { state: { mode: 'skim' } });
+    navigate(`/reading-view/${articleId}`, { state: { mode: "skim" } });
   };
 
   const handleSnooze = (articleId: string) => {
-    // Add to snoozed set (visual feedback)
+    // Optimistically hide from the list immediately for a snappy UX.
+    // The API call persists this so it survives a page refresh.
     setSnoozedIds((prev) => new Set([...prev, articleId]));
-
-    // In a real app, this would update the backend
-    // For now, remove from display after animation
-    setTimeout(() => {
-      setArticles((prev) => prev.filter((a) => a.id !== articleId));
-      setSnoozedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(articleId);
-        return next;
-      });
-    }, 300);
+    snoozeMutation.mutate(articleId);
   };
 
   const handleSaveNew = () => {
-    navigate('/');
+    navigate("/");
   };
 
   const handleViewLibrary = () => {
-    navigate('/library-view')
+    navigate("/library-view");
   };
 
+  if (!isClient || isLoading) {
+    return (
+      <div className="container-app py-12 text-center text-sm text-muted-foreground">
+        Loading today's reads...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container-app py-12 text-center text-sm text-destructive">
+        Failed to load today's reads. Please try again.
+      </div>
+    );
+  }
+
   // Show empty state if no articles
-  if (articles.length === 0 && isClient) {
+  if (visibleArticles.length === 0) {
     return (
       <TodaysReadsEmpty
         onSaveNew={handleSaveNew}
@@ -87,19 +93,19 @@ export default function TodaysReadsPage() {
           Today's Reads
         </h1>
         <p className="text-muted-foreground">
-          {articles.length} {articles.length === 1 ? "item" : "items"} to
-          explore
+          {visibleArticles.length}{" "}
+          {visibleArticles.length === 1 ? "item" : "items"} to explore
         </p>
       </div>
 
       {/* Articles Grid */}
       <div className="space-y-4">
-        {articles.map((article) => (
+        {visibleArticles.map((article) => (
           <div
             key={article.id}
             className={cn(
               "transition-all duration-300",
-              snoozedIds.has(article.id) && "opacity-50 scale-95"
+              snoozedIds.has(article.id) && "opacity-50 scale-95",
             )}
           >
             <ArticleCardItem

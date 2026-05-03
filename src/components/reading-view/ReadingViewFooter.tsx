@@ -3,19 +3,25 @@ import { Button } from "@/components/ui/button";
 import SafeIcon from "@/components/common/SafeIcon";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useMarkItemComplete } from "@/services/queries";
 
 interface ReadingViewFooterProps {
   articleId: string;
+  articleTitle?: string;
 }
 
 type CompletionStatus = "read" | "skimmed" | null;
 
-const ReadingViewFooter = ({ articleId }: ReadingViewFooterProps) => {
+const ReadingViewFooter = ({
+  articleId,
+  articleTitle,
+}: ReadingViewFooterProps) => {
   const navigate = useNavigate();
   const [isClient, setIsClient] = useState(true);
   const [completionStatus, setCompletionStatus] =
     useState<CompletionStatus>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const completeMutation = useMarkItemComplete();
+  const isSubmitting = completeMutation.isPending;
 
   useEffect(() => {
     setIsClient(false);
@@ -27,22 +33,38 @@ const ReadingViewFooter = ({ articleId }: ReadingViewFooterProps) => {
   }, []);
 
   const handleCompletion = async (status: CompletionStatus) => {
-    setIsSubmitting(true);
+    if (!status) return;
+
     setCompletionStatus(status);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    const isCompleted = status === "read";
+    const isSkimmed = status === "skimmed";
 
-    // Navigate to completion reflection
+    try {
+      await completeMutation.mutateAsync({
+        id: articleId,
+        isCompleted,
+        isSkimmed,
+      });
+    } catch {
+      return;
+    }
+
     if (typeof window !== "undefined") {
-      navigate('/completion-reflection');
+      navigate("/completion-reflection", {
+        state: {
+          itemId: articleId,
+          articleTitle,
+        },
+      });
     }
   };
 
-  return  <footer
+  return (
+    <footer
       className={cn(
-        'sticky bottom-0 z-40 border-t border-border bg-background transition-shadow duration-200',
-        (isClient || isSubmitting) && 'shadow-soft'
+        "sticky bottom-0 z-40 border-t border-border bg-background transition-shadow duration-200",
+        (isClient || isSubmitting) && "shadow-soft",
       )}
     >
       <div className="container-reading py-6 md:py-8">
@@ -55,16 +77,20 @@ const ReadingViewFooter = ({ articleId }: ReadingViewFooterProps) => {
           <div className="flex gap-3">
             {/* Mark as Read */}
             <Button
-              onClick={() => handleCompletion('read')}
+              onClick={() => handleCompletion("read")}
               disabled={isSubmitting}
-              className={(isClient || isSubmitting) ? 'opacity-100' : 'opacity-0'}
+              className={isClient || isSubmitting ? "opacity-100" : "opacity-0"}
               style={{
-                transition: 'opacity 0.3s ease-out'
+                transition: "opacity 0.3s ease-out",
               }}
             >
-              {isSubmitting && completionStatus === 'read' ? (
+              {isSubmitting && completionStatus === "read" ? (
                 <>
-                  <SafeIcon name="Loader2" size={16} className="animate-spin mr-2" />
+                  <SafeIcon
+                    name="Loader2"
+                    size={16}
+                    className="animate-spin mr-2"
+                  />
                   Processing...
                 </>
               ) : (
@@ -77,17 +103,21 @@ const ReadingViewFooter = ({ articleId }: ReadingViewFooterProps) => {
 
             {/* Mark as Skimmed */}
             <Button
-              onClick={() => handleCompletion('skimmed')}
+              onClick={() => handleCompletion("skimmed")}
               disabled={isSubmitting}
               variant="secondary"
-              className={(isClient || isSubmitting) ? 'opacity-100' : 'opacity-0'}
+              className={isClient || isSubmitting ? "opacity-100" : "opacity-0"}
               style={{
-                transition: 'opacity 0.3s ease-out'
+                transition: "opacity 0.3s ease-out",
               }}
             >
-              {isSubmitting && completionStatus === 'skimmed' ? (
+              {isSubmitting && completionStatus === "skimmed" ? (
                 <>
-                  <SafeIcon name="Loader2" size={16} className="animate-spin mr-2" />
+                  <SafeIcon
+                    name="Loader2"
+                    size={16}
+                    className="animate-spin mr-2"
+                  />
                   Processing...
                 </>
               ) : (
@@ -102,10 +132,12 @@ const ReadingViewFooter = ({ articleId }: ReadingViewFooterProps) => {
 
         {/* Accessibility hint */}
         <p className="text-xs text-muted-foreground mt-4">
-          Choose how you consumed this article to help improve your reading habits.
+          Choose how you consumed this article to help improve your reading
+          habits.
         </p>
       </div>
     </footer>
+  );
 };
 
 export default ReadingViewFooter;

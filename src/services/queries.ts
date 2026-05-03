@@ -41,6 +41,18 @@ export interface CreateItemPayload {
   status: string;
 }
 
+export interface CompleteItemRequest {
+  id: string;
+  isCompleted: boolean;
+  isSkimmed: boolean;
+}
+
+export interface FeedbackRequest {
+  id: string;
+  worthReadingFeedback: "yes" | "no";
+  note?: string;
+}
+
 export interface ItemResponse {
   id: string;
   url: string;
@@ -67,7 +79,7 @@ export const createApiQuery = <TData = unknown, TError = ApiError>(
   queryOptions?: Omit<
     UseQueryOptions<ApiResponse<TData>, TError>,
     "queryKey" | "queryFn"
-  >
+  >,
 ) => {
   return () => {
     const api = useApiClient();
@@ -89,16 +101,16 @@ export const createApiQuery = <TData = unknown, TError = ApiError>(
 export const createApiMutation = <
   TData = unknown,
   TVariables = unknown,
-  TError = ApiError
+  TError = ApiError,
 >(
   mutationFn: (
     api: ReturnType<typeof useApiClient>,
-    variables: TVariables
+    variables: TVariables,
   ) => Promise<ApiResponse<TData>>,
   mutationOptions?: Omit<
     UseMutationOptions<ApiResponse<TData>, TError, TVariables>,
     "mutationFn"
-  >
+  >,
 ) => {
   return () => {
     const api = useApiClient();
@@ -137,7 +149,7 @@ export const useCreateItem = () => {
     async (api, variables) => {
       return await api.post<ApiSuccessPayload<CreateItemPayload>>(
         "/items/create-item",
-        variables
+        variables,
       );
     },
     {
@@ -147,7 +159,7 @@ export const useCreateItem = () => {
       onError: (error) => {
         console.error("Failed to create item:", error);
       },
-    }
+    },
   )();
 };
 
@@ -166,7 +178,7 @@ export const useGetItem = (itemId: string, options?: { enabled?: boolean }) => {
         const status = query.state.data?.data.data?.status;
         return status === "processing" ? 2000 : false;
       },
-    }
+    },
   )();
 };
 
@@ -180,6 +192,86 @@ export const useGetItems = (status?: string) => {
     { params: status ? { status } : undefined },
     {
       staleTime: 1000 * 30, // 30 seconds
-    }
+    },
+  )();
+};
+
+/**
+ * Get Today's Items Query
+ * Fetches up to 3 ready, unread items for the day queue
+ */
+export const useGetTodaysItems = () => {
+  return createApiQuery<ApiSuccessPayload<ItemResponse[]>>(
+    "/items/today",
+    undefined,
+    {
+      staleTime: 1000 * 10,
+    },
+  )();
+};
+
+/**
+ * Mark Item Complete Mutation
+ * Updates isCompleted/isSkimmed based on read mode
+ */
+export const useMarkItemComplete = () => {
+  return createApiMutation<
+    ApiSuccessPayload<Pick<ItemResponse, "id" | "isCompleted" | "isSkimmed">>,
+    CompleteItemRequest
+  >(async (api, variables) => {
+    return await api.patch<
+      ApiSuccessPayload<Pick<ItemResponse, "id" | "isCompleted" | "isSkimmed">>
+    >(`/items/items/${variables.id}/complete`, {
+      isCompleted: variables.isCompleted,
+      isSkimmed: variables.isSkimmed,
+    });
+  })();
+};
+
+/**
+ * Submit Feedback Mutation
+ * Sends yes/no worth-reading feedback with optional note
+ */
+export const useSubmitFeedback = () => {
+  return createApiMutation<
+    ApiSuccessPayload<Pick<ItemResponse, "id">>,
+    FeedbackRequest
+  >(async (api, variables) => {
+    return await api.patch<ApiSuccessPayload<Pick<ItemResponse, "id">>>(
+      `/items/items/${variables.id}/feedback`,
+      {
+        worthReadingFeedback: variables.worthReadingFeedback,
+        note: variables.note,
+      },
+    );
+  })();
+};
+
+/**
+ * Snooze Item Mutation
+ * Hides an item from today's reads until midnight tonight.
+ * The /today endpoint automatically un-snoozes it the next day.
+ */
+export const useSnoozeItem = () => {
+  return createApiMutation<ApiSuccessPayload<{ id: string }>, string>(
+    async (api, itemId) => {
+      return await api.patch<ApiSuccessPayload<{ id: string }>>(
+        `/items/items/${itemId}/snooze`,
+      );
+    },
+  )();
+};
+
+/**
+ * Delete Item Mutation
+ * Permanently removes an item from the user's library.
+ */
+export const useDeleteItem = () => {
+  return createApiMutation<ApiSuccessPayload<null>, string>(
+    async (api, itemId) => {
+      return await api.delete<ApiSuccessPayload<null>>(
+        `/items/items/${itemId}`,
+      );
+    },
   )();
 };
